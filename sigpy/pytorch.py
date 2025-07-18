@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Functions for interoperability between sigpy and pytorch.
-
-"""
+"""Functions for interoperability between sigpy and pytorch."""
 import numpy as np
 
 from sigpy import backend, config
@@ -41,7 +39,7 @@ def to_pytorch(array, requires_grad=True):  # pragma: no cover
     if device == backend.cpu_device:
         tensor = torch.from_numpy(array)
     else:
-        tensor = from_dlpack(array.toDlpack())
+        tensor = from_dlpack(array)
 
     tensor.requires_grad = requires_grad
     return tensor.contiguous()
@@ -70,7 +68,7 @@ def from_pytorch(tensor, iscomplex=False):  # pragma: no cover
         if config.cupy_enabled:
             import cupy as cp
 
-            output = cp.fromDlpack(to_dlpack(tensor.contiguous()))
+            output = cp.from_dlpack(to_dlpack(tensor.contiguous()))
         else:
             raise TypeError(
                 "CuPy not installed, "
