@@ -88,7 +88,7 @@ class PowerMethod(Alg):
     def __init__(self, A, x, norm_func=None, max_iter=30):
         self.A = A
         self.x = x
-        self.max_eig = np.infty
+        self.max_eig = np.inf
         self.norm_func = norm_func
         super().__init__(max_iter)
 
@@ -180,7 +180,7 @@ class GradientMethod(Alg):
                 self.z = self.x.copy()
                 self.t = 1
 
-        self.resid = np.infty
+        self.resid = np.inf
         super().__init__(max_iter)
 
     def _update(self):
@@ -377,7 +377,7 @@ class PrimalDualHybridGradient(Alg):
             with self.u_device:
                 self.sigma_min = xp.amin(xp.abs(sigma)).item()
 
-        self.resid = np.infty
+        self.resid = np.inf
 
         super().__init__(max_iter)
 
@@ -496,7 +496,7 @@ class AugmentedLagrangianMethod(Alg):
             xp = device.xp
             with device:
                 util.axpy(self.u, self.mu, self.g(self.x))
-                backend.copyto(self.u, xp.clip(self.u, 0, np.infty))
+                backend.copyto(self.u, xp.clip(self.u, 0, np.inf))
 
         if self.h is not None:
             util.axpy(self.v, self.mu, self.h(self.x))
@@ -808,10 +808,10 @@ class NewtonsMethod(Alg):
         self.gradf = gradf
         self.inv_hessf = inv_hessf
         self.x = x
-        self.lamda = np.infty
+        self.lamda = np.inf
         self.beta = beta
         self.f = f
-        self.residual = np.infty
+        self.residual = np.inf
         self.tol = tol
 
         super().__init__(max_iter)
@@ -970,7 +970,7 @@ class GerchbergSaxton(Alg):
         self.tol = tol
         self.max_tol = max_tol
         self.lamb = lamb
-        self.residual = np.infty
+        self.residual = np.inf
 
     def _update(self):
         device = backend.get_device(self.y)
