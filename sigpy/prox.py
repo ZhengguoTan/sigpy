@@ -5,6 +5,8 @@ l1 ball projection, and box constraints.
 """
 import numpy as np
 import random
+import torch
+import torch.nn as nn
 
 from sigpy import backend, util, thresh, linop
 
@@ -562,3 +564,50 @@ class SLRMCReg(Prox):
         R4 = linop.Transpose(R3.oshape, axes=(1, 0))
 
         return R4 * R3 * R2 * R1
+
+
+class DAEReg(Prox):
+    r"""Denoising AutoEncoder (DAE) as Regularization
+
+    Args:
+        shape (tuple of int): input shapes.
+        DAE (nn.Module): Learned DAE model.
+
+    References:
+        * Mani M, Magnotta VA, Jacob M.
+          qModeL: A plug-and-play model-based reconstruction
+          for highly accelerated multi-shot diffusion MRI
+          using learned priors.
+          Magn Reson Med 86:835-851 (2021).
+
+    Author:
+        Zhengguo Tan <zhengguo.tan@gmail.com>
+    """
+
+    def __init__(self, shape, DAE: nn.Module):
+        self.DAE = DAE
+        self.shape = shape  # [N_diff, N_shot, N_c, N_z, N_y, N_x]
+
+        super().__init__(shape)
+
+    def _prox(self, alpha, input):
+        self._check_shape(input)
+        N_diff, N_shot, N_c, N_z, N_y, N_x = input_pt.shape
+
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        sp_device = backend.get_device(input)
+
+        input_pt = torch.from_numpy(backend.to_device(input)).to(device)
+
+        mag = torch.abs(input_pt)
+        phs = torch.angle(input_pt)
+
+        mag_r = mag.view(N_diff, -1).t()  # [-1, N_diff]
+
+        reg_m = self.DAE(mag_r)
+        reg_m = reg_m.t().view(self.shape)
+
+        output = reg_m * torch.exp(1j * phs)
+        output = output.detach().cpu().numpy()
+
+        return backend.to_device(output, device=sp_device)
