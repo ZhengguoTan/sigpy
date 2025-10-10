@@ -604,7 +604,7 @@ class DAEReg(Prox):
 
         mag_r = mag.view(N_diff, -1).t()  # [-1, N_diff]
 
-        reg_m = self.DAE(mag_r)
+        reg_m = alpha * self.DAE(mag_r)
         reg_m = reg_m.t().view(self.shape)
 
         output = reg_m * torch.exp(1j * phs)
