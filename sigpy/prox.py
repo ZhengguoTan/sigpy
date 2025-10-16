@@ -584,9 +584,10 @@ class DAEReg(Prox):
         Zhengguo Tan <zhengguo.tan@gmail.com>
     """
 
-    def __init__(self, shape, DAE: nn.Module):
+    def __init__(self, shape, lamda, DAE: nn.Module):
         self.DAE = DAE
         self.shape = shape  # [N_diff, N_shot, N_c, N_z, N_y, N_x]
+        self.lamda = lamda
 
         super().__init__(shape)
 
@@ -604,7 +605,7 @@ class DAEReg(Prox):
 
         mag_r = mag.view(N_diff, -1).t()  # [-1, N_diff]
 
-        reg_m = alpha * self.DAE(mag_r)
+        reg_m = self.lamda * alpha * self.DAE(mag_r)
         reg_m = reg_m.t().view(self.shape)
 
         output = reg_m * torch.exp(1j * phs)
