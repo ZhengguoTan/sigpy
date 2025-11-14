@@ -1714,6 +1714,12 @@ class HDNUFFT(NUFFT):
         if len(ishape) <= 3 and len(coord.shape) <= 3:
             nr_hd = 0
 
+        if len(coord.shape) == 4:
+            nr_hd = 1
+
+        if len(coord.shape) == 5:
+            nr_hd = 2
+
         self.nr_hd = nr_hd
         self.use_dcf = use_dcf
 

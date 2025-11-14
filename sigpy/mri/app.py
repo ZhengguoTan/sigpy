@@ -505,6 +505,7 @@ class EspiritCalib(sp.app.App):
         kernel_width=6,
         crop=0.95,
         max_iter=100,
+        sets=1,
         device=sp.cpu_device,
         output_eigenvalue=False,
         show_pbar=True,
@@ -573,17 +574,39 @@ class EspiritCalib(sp.app.App):
             )
 
         super().__init__(alg, show_pbar=show_pbar)
+        self.max_eig = np.array([alg.max_eig])
+
+        self.sets = sets
+        if self.sets > 1:
+            U, S, VH = xp.linalg.svd(AHA, full_matrices=False)
+
+            print(U.shape, S.shape, VH.shape)
+
+            self.mps = U[..., :self.sets]
+            self.max_eig = S[..., :self.sets]
+
+        print('self.mps ', self.mps.shape)
+        print('self.max_eig ', self.max_eig.shape)
 
     def _output(self):
         xp = self.device.xp
         with self.device:
-            # Normalize phase with respect to first channel
-            mps = self.mps.T[0]
-            mps *= xp.conj(mps[0] / xp.abs(mps[0]))
+            mps = []
+            max_eig = []
+            for s in range(self.mps.shape[-1]):
+                # Normalize phase with respect to first channel
+                c = self.mps.T[s]
+                c *= xp.conj(c[0] / xp.abs(c[0]))
 
-            # Crop maps by thresholding eigenvalue
-            max_eig = self.alg.max_eig.T[0]
-            mps *= max_eig > self.crop
+                # Crop maps by thresholding eigenvalue
+                me = self.max_eig.T[s]
+                c *= me > self.crop
+
+                mps.append( c )
+                max_eig.append( me )
+
+            mps = xp.array(mps)
+            max_eig = xp.array(max_eig)
 
         if self.output_eigenvalue:
             return mps, max_eig
