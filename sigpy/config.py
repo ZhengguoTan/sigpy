@@ -6,6 +6,7 @@ This module contains flags to turn on and off optional modules.
 """
 import warnings
 from importlib import util
+
 import torch
 
 cuda_avail = torch.cuda.is_available()
@@ -24,7 +25,7 @@ if cupy_enabled:  # pragma: no cover
     try:
         cudnn_enabled = util.find_spec("cupy.cuda.cudnn") is not None
         if cudnn_enabled:
-            from cupy import cudnn  # noqa: F401
+            import cupy.cuda.cudnn as cudnn  # noqa: F401
     except ImportError as e:
         warnings.warn(
             f"Importing cupy.cuda.cudnn failed. "
