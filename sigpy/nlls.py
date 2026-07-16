@@ -89,7 +89,7 @@ class NonLinearLeastSquares(alg.Alg):
             # residual
             resid = xp.linalg.norm(self.r).item()
 
-            print("iter: " + "%2d"%(self.iter) + "; alpha: " + "%.2f"%(self.alpha) + "; resid: " + "%4.3f"%(resid))
+            print("iter: " + "%2d"%(self.iter) + "; alpha: " + "%.6f"%(self.alpha) + "; resid: " + "%9.6f"%(resid))
 
             self.p = self.A.adjoint(self.x, self.r)
 
