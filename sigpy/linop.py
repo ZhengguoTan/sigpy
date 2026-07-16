@@ -2200,6 +2200,8 @@ class Sobolev(Linop):
                 dist = pow(x/NX - 0.5, 2.) + pow(y/NY - 0.5, 2.)
                 W[x, y] = 1./pow(1 + a*dist, b) + 0j
 
+        W /= (NY*NX)**0.5
+
         return W
 
     def _apply(self, input):
