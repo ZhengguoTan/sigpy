@@ -3,13 +3,14 @@
 
 * retrospectively undersampling phase-encoding direction
 * split shots within one diffusion encoding
+* find non-zero ky lines from Cartesian k-space data
 
 Author:
     Zhengguo Tan <zhengguo.tan@gmail.com>
 """
 import numpy as np
 
-
+# %%
 def unsamp_ky(kdat: np.ndarray, 
               pe_axis: int = -3,
               uniform_unsamp: bool = True, 
@@ -57,7 +58,7 @@ def unsamp_ky(kdat: np.ndarray,
 
     return np.reshape(output, kdat.shape)
 
-
+# %%
 def split_shots(kdat: np.ndarray, 
                 pe_axis: int = -2, 
                 shots: int = 2, 
@@ -102,3 +103,41 @@ def split_shots(kdat: np.ndarray,
     output = np.swapaxes(output, 1, pe_axis)
 
     return output
+
+# %%
+def find_nonzero_ky_lines(kdat: np.ndarray, ky_axis: int = -2):
+    """find non-zero ky lines in k-space data
+    
+    Input:
+        kdat: k-space data, shape [..., ky, ...]
+        ky_axis: phase-encoding axis [default: -2]
+    
+    Output:
+        nonzero_ky_ind: indices of non-zero ky lines, shape [..., N_nonzero_ky]
+    """
+    assert kdat.shape[-3] == 1  # slice dim must be 1
+
+    kdat_high_shape = kdat.shape[:-5]
+    kdat_high_len = np.prod(kdat_high_shape)
+    print('> kdat_high_len: ', kdat_high_len)
+
+    kdat5 = np.reshape(kdat, [-1] + list(kdat.shape[-5:]))
+    print('> kdat5: ', kdat5.shape)
+
+    nonzero_ky_ind = []
+
+    for h in range(kdat_high_len):
+
+        kdat1 = kdat5[h, ...]
+        kdat1 = np.swapaxes(kdat1, ky_axis, 0)
+        kdat2 = np.reshape(kdat1, (kdat1.shape[0], -1))
+
+        kdat3 = np.sum(kdat2, axis=1)
+
+        h_ind = np.array(np.nonzero(kdat3)).ravel()
+        nonzero_ky_ind.append(h_ind)
+
+    nonzero_ky_ind = np.array(nonzero_ky_ind)
+    nonzero_ky_ind = np.reshape(nonzero_ky_ind, list(kdat.shape[:-5]) + [-1])
+
+    return nonzero_ky_ind
