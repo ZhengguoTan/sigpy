@@ -10,6 +10,8 @@ Author:
 """
 import numpy as np
 
+from .dims import *
+
 # %%
 def unsamp_ky(kdat: np.ndarray, 
               pe_axis: int = -3,
@@ -85,6 +87,11 @@ def split_shots(kdat: np.ndarray,
     output = np.zeros_like(kdat2, shape=out_shape)
 
     phaenc_len = kdat2.shape[0]
+    
+    if sampled_phaenc_len % 2 == 1: # odd lines
+        offset = -1
+    else:
+        offset = 0
 
     for l in range(sampled_phaenc_len):
         s = l % shots
@@ -93,9 +100,10 @@ def split_shots(kdat: np.ndarray,
         ind_i = sampled_phaenc_ind[l]
         
         if (s % 2 == 1) and (pe_reverse is True):
-            ind_i = sampled_phaenc_ind[-l]
-            ind_o = phaenc_len - ind_o
-            # print('> i %3d o %3d'%(ind_i, ind_o))
+            ind_i = sampled_phaenc_ind[-l+offset]
+            ind_o = phaenc_len - sampled_phaenc_ind[l+offset]
+
+        print('> l %3d i %3d o %3d'%(l, ind_i, ind_o))
 
         output[s, ind_o, :] = kdat2[ind_i, :]
 
@@ -117,18 +125,19 @@ def find_nonzero_ky_lines(kdat: np.ndarray, ky_axis: int = -2):
     """
     assert kdat.shape[-3] == 1  # slice dim must be 1
 
-    kdat_high_shape = kdat.shape[:-5]
+    kdat_high_shape = kdat.shape[:DIM_ECHO]
     kdat_high_len = np.prod(kdat_high_shape)
-    print('> kdat_high_len: ', kdat_high_len)
 
-    kdat5 = np.reshape(kdat, [-1] + list(kdat.shape[-5:]))
-    print('> kdat5: ', kdat5.shape)
+    kdat5 = np.reshape(kdat, [-1] + list(kdat.shape[DIM_ECHO:]))
 
     nonzero_ky_ind = []
+    nonzero_ky_len = []
 
     for h in range(kdat_high_len):
 
-        kdat1 = kdat5[h, ...]
+        kdat1 = kdat5[h, ...]        
+        kdat1 = np.sum(kdat1, axis=(DIM_ECHO, DIM_COIL, DIM_Z), keepdims=True)
+
         kdat1 = np.swapaxes(kdat1, ky_axis, 0)
         kdat2 = np.reshape(kdat1, (kdat1.shape[0], -1))
 
@@ -136,8 +145,15 @@ def find_nonzero_ky_lines(kdat: np.ndarray, ky_axis: int = -2):
 
         h_ind = np.array(np.nonzero(kdat3)).ravel()
         nonzero_ky_ind.append(h_ind)
+        nonzero_ky_len.append(len(h_ind))
+
+    nonzero_ky_len = min(np.array(nonzero_ky_len))
+    # print('--> length of nonzero_ky_len: ', nonzero_ky_len)
+
+    for h in range(kdat_high_len):
+        nonzero_ky_ind[h] = nonzero_ky_ind[h][:nonzero_ky_len]
 
     nonzero_ky_ind = np.array(nonzero_ky_ind)
-    nonzero_ky_ind = np.reshape(nonzero_ky_ind, list(kdat.shape[:-5]) + [-1])
+    nonzero_ky_ind = np.reshape(nonzero_ky_ind, list(kdat.shape[:DIM_ECHO]) + [-1])
 
     return nonzero_ky_ind
