@@ -1712,12 +1712,8 @@ class HDNUFFT(NUFFT):
 
         if len(ishape) <= 3 and len(coord.shape) <= 3:
             nr_hd = 0
-
-        if len(coord.shape) == 4:
-            nr_hd = 1
-
-        if len(coord.shape) == 5:
-            nr_hd = 2
+        else:
+            nr_hd = len(coord.shape) - 3  # 3 comes from the right most 3 dims
 
         self.nr_hd = nr_hd
 
