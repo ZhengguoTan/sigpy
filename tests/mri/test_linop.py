@@ -4,7 +4,7 @@ import numpy as np
 import numpy.testing as npt
 
 import sigpy as sp
-from sigpy.mri import linop
+from sigpy.mri import linop, nlop
 
 if __name__ == "__main__":
     unittest.main()
@@ -161,3 +161,33 @@ class TestLinop(unittest.TestCase):
 
         npt.assert_allclose(sp.fft(full_img * mps, axes=[-1, -2]),
                             A * img)
+
+    def test_water_fat_model(self):
+
+        TE = np.array([2.46, 3.69, 4.92, 6.15, 7.38]) * 1e-3
+        zm = nlop.calc_fat_modu(TE, B0=3.0)
+        N_echo, N_param = zm.shape
+
+        input_shape = [5, 1, N_param, 1, 1, 16, 16]
+        input = sp.randn(input_shape, dtype=complex)
+
+        output_shape = [5, 1, N_echo, 1, 1, 16, 16]
+
+        # direct computation
+        wf0 = np.zeros(output_shape, dtype=complex)
+        w = input[:, :, 0, ...]
+        f = input[:, :, 1, ...]
+        for e in range(N_echo):
+            wf0[:, :, e, ...] = zm[e, 0] * w + zm[e, 1] * f
+
+        # computation using linear operator
+        T1 = sp.linop.Transpose(input_shape, [-5, -6, -7, -4, -3, -2, -1])
+        R1 = sp.linop.Reshape([T1.oshape[0], np.prod(T1.oshape[1:])], T1.oshape)
+        MM = sp.linop.MatMul(R1.oshape, zm)
+        R2 = sp.linop.Reshape([N_echo] + list(T1.oshape[1:]), MM.oshape)
+        T2 = sp.linop.Transpose(R2.oshape, [-5, -6, -7, -4, -3, -2, -1])
+        A = T2 * R2 * MM * R1 * T1
+        # print('> A ishape: ', A.ishape, ', oshape: ', A.oshape)
+        wf1 = A * input
+
+        npt.assert_allclose(wf0, wf1)
