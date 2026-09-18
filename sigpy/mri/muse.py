@@ -411,6 +411,13 @@ def MuseRecon(y: np.ndarray, coils: np.ndarray,
                     eco_phase_xp = sp.to_device(eco_phase, device=device)
                     eco_weight_xp = sp.to_device(eco_weight, device=device)
 
+                else:
+
+                    eco_phase_acs_xp = None
+                    eco_weight_acs_xp = None
+                    eco_phase_xp = None
+                    eco_weight_xp = None
+
                 ksp_acs_xp = sp.to_device(ksp_acs, device=device)
                 mps_acs_slice_xp = sp.to_device(mps_acs_slice, device=device)
 
@@ -426,9 +433,12 @@ def MuseRecon(y: np.ndarray, coils: np.ndarray,
                     ksp = ksp[..., None, :, :]
                     print('> ksp: ', ksp.shape)
 
+                    phase_echo = eco_phase_acs_xp[s] if eco_phase_acs_xp is not None else None
+                    weights = eco_weight_acs_xp[s] if eco_weight_acs_xp is not None else None
+
                     A = sms_sense_linop(ksp, mps_acs_slice_xp, yshift,
-                                        phase_echo=eco_phase_acs_xp[s],
-                                        weights=eco_weight_acs_xp[s])
+                                        phase_echo=phase_echo,
+                                        weights=weights)
 
                     img = sms_sense_solve(A, ksp, lamda=5E-5, tol=0,
                                           max_iter=max_iter,
