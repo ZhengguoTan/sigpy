@@ -3,8 +3,9 @@ import unittest
 
 import numpy as np
 import numpy.testing as npt
+import random
 
-from sigpy import backend, config, linop, util
+from sigpy import backend, config, fourier, linop, util
 
 if __name__ == "__main__":
     unittest.main()
@@ -586,6 +587,42 @@ class TestLinop(unittest.TestCase):
         self.check_linop_adjoint(A)
         self.check_linop_normal(A)
         self.check_linop_pickleable(A)
+
+    def test_SingleKyFFT(self):
+        ishape = [2, 1, 4, 3, 1, 6, 6]
+
+        ky_axis = -2
+        ky_index = random.randrange(ishape[ky_axis])
+
+        for device in devices:
+            xp = device.xp
+
+            input = util.randn(ishape, dtype=complex, device=device)
+
+            # 2D FFT and then Extract the ky_index
+            y0 = fourier.fft(input, axes=(-2, -1))
+            weight = xp.zeros_like(input)
+            weight[..., ky_index, :] = 1
+            y1 = weight * y0
+
+            x1 = fourier.ifft(xp.conj(weight) * y1, axes=(-2, -1))
+
+            # Using SingleKyFFT
+            SF = linop.SingleKyFFT(ishape, -1, 
+                                   ky_axis=ky_axis, ky_index=ky_index)
+            y2 = SF(input)
+            x2 = SF.H(y2)
+
+            self.check_linop_linear(SF)
+            self.check_linop_adjoint(SF)
+            self.check_linop_normal(SF)
+            self.check_linop_pickleable(SF)
+
+            npt.assert_allclose(backend.to_device(y1),
+                                backend.to_device(y2))
+
+            npt.assert_allclose(backend.to_device(x1),
+                                backend.to_device(x2))
 
     # def test_RealValueConstraint(self):
     #     for device in devices:

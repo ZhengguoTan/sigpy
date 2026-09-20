@@ -815,6 +815,94 @@ class IFFT(Linop):
         return Identity(self.ishape)
 
 
+class SingleKyFFT(Linop):
+    """Center SingleKyFFT on selected ky lines
+
+    Args:
+        shape (tuple of int): Input shape.
+        axis (int): which axis to perform 1DFFT [default: -1].
+        ky_axis (int): the axis of ky [default: -2].
+        ky_index (int): which ky line to perform 1DFFT.
+
+    Author:
+        Zhengguo Tan <zhengguo.tan@gmail.com>
+    """
+    def __init__(self, shape, axis: int = -1, ky_axis: int = -2, ky_index: int = 0):
+        self.axis = axis
+        self.ky_axis = ky_axis
+        self.ky_index = ky_index
+
+        Ny = shape[ky_axis]
+        y_line = np.arange(Ny) - int(Ny//2)
+        y_cidx = ky_index - int(Ny//2)
+
+        self.ky_vec = np.exp(-2j * np.pi * y_cidx * y_line / Ny) / np.sqrt(Ny)  # [NY, 1]
+
+        super().__init__(shape, shape)
+
+    def _apply(self, input):
+        device = backend.get_device(input)
+        xp = device.xp
+
+        with device:
+            kx_fft = fourier.fft(input, axes=[self.axis])
+            kx_fft_s = xp.swapaxes(kx_fft, -1, self.ky_axis)  # [..., NY]
+
+            ky_fft = kx_fft_s @ backend.to_device(self.ky_vec, device)
+
+            output = xp.zeros_like(kx_fft_s)
+            output[..., self.ky_index] = ky_fft
+            output = xp.swapaxes(output, self.ky_axis, -1)
+
+            return output
+
+    def _adjoint_linop(self):
+        return SingleKyIFFT(self.ishape, self.axis, self.ky_axis, self.ky_index)
+
+
+class SingleKyIFFT(Linop):
+    """Center SingleKyIFFT on selected ky lines
+
+    Args:
+        shape (tuple of int): Input shape.
+        axis (int): which axis to perform 1DIFFT [default: -1].
+        ky_axis (int): the axis of ky [default: -2].
+        ky_index (int): which ky line to perform 1DIFFT.
+    Author:
+        Zhengguo Tan <zhengguo.tan@gmail.com>
+    """
+    def __init__(self, shape, axis: int = -1, ky_axis: int = -2, ky_index: int = 0):
+        self.axis = axis
+        self.ky_axis = ky_axis
+        self.ky_index = ky_index
+
+        Ny = shape[ky_axis]
+        y_line = (np.arange(Ny) - int(Ny//2)).reshape(1, -1)
+        y_cidx = ky_index - int(Ny//2)
+
+        self.ky_vec = np.exp( 2j * np.pi * y_cidx * y_line / Ny) / np.sqrt(Ny)  # [1, NY]
+
+        super().__init__(shape, shape)
+
+    def _apply(self, input):
+        device = backend.get_device(input)
+        xp = device.xp
+
+        with device:
+            ky_fft = xp.swapaxes(input, self.ky_axis, -1)
+            ky_fft_i = ky_fft[..., [self.ky_index]]  # [..., 1]
+
+            ky_fft_2 = ky_fft_i * backend.to_device(self.ky_vec, device)
+
+            ky_fft_2 = xp.swapaxes(ky_fft_2, -1, self.ky_axis)
+
+            output = fourier.ifft(ky_fft_2, axes=[self.axis])
+
+            return output
+
+    def _adjoint_linop(self):
+        return SingleKyFFT(self.ishape, self.axis, self.ky_axis, self.ky_index)
+
 def _get_matmul_oshape(ishape, mshape, adjoint):
     ishape_exp, mshape_exp = util._expand_shapes(ishape, mshape)
     if adjoint:
