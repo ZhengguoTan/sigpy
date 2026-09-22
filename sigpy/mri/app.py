@@ -751,6 +751,52 @@ class HighDimensionalRecon(sp.app.LinearLeastSquares):
     Args:
         y (array): measured k-space data.
         mps (array): coil sensitivity maps.
+        weights (array): forward model weighting.
+        coord (array): k-space non-Cartesian trajectory.
+        model_water_fat (bool): model water/fat 2-compartment signal. [default: False]
+        B0 (float): B0 field strength (T). [default: 3.0]
+        TE (1D array): echo time array (ms).
+
+        basis (2D array): temporal subspace matrix.
+
+        phase_shot (array): shot-to-shot phase maps.
+        combine_shot (bool): reconstructed images (x) are shot-combined, 
+            i.e., x.shape[DIM_SEG] = 1. [default: False]
+
+        phase_echo (array): echo-to-echo phase maps.
+        combine_echo (bool): reconstructed images (x) are echo-combined,
+            i.e., x.shape[DIM_ECHO] = 1. [default: False]
+
+        phase_sms (array): multi-band phase maps.
+
+        scale (float): scaling factor of y. [default: 0 - no scaling]
+
+        regu (str): regularization type. 
+            [choices: 'TIK' (default), 'LLR', 'TV']
+
+        regu_kspace (bool): regularize the FFT of x. [default: False]
+            This is meant for structural low-rank regularization
+
+        regu_axes (list of int): on which axes the regularization is applied. 
+            [default: [-2, -1]]
+        
+        x (array): initialization.
+
+        blk_shape (list of int): block shape in LLR. [default: [8, 8]]
+        blk_strides (list of int): block strides in LLR. [default: [8, 8]]
+        normalization (bool): apply normalization in LLR. [default: False]
+
+        thresh (str): threshold type. [choices: 'soft' (default), 'hard']
+
+        max_iter (int): maximal number of iterations (ADMM outer iterations). [default: 50]
+        max_cg_iter (int): maximal number of CG iterations. [default: 30]
+        solver (str): solver. [choices: 'ADMM', None]
+
+        ro_extend_fold (int): reconstruct SMS data using the readout-extended-FOV concept.
+            Please refer to https://doi.org/10.1002/mrm.25897 and sigpy.mri.muse.
+
+        device (Device): [choices: sp.Device(0) - GPU, sp.Device(-1) - CPU]
+        **kwargs: ...
 
     Author:
         Zhengguo Tan <zhengguo.tan@gmail.com>
@@ -771,6 +817,8 @@ class HighDimensionalRecon(sp.app.LinearLeastSquares):
     """
     def __init__(self, y, mps, lamda=0,
                  weights=None, coord=None,
+                 model_water_fat: bool = False, 
+                 B0: float = 3.0, TE=None,
                  basis=None,
                  phase_shot=None, combine_shot=False,
                  phase_echo=None, combine_echo=False,
@@ -807,31 +855,58 @@ class HighDimensionalRecon(sp.app.LinearLeastSquares):
         # start to construct image shape
         img_shape = [1] + [MB] + [Ny] + [Nx]
 
-        # %% construct MRI forward model
+        if model_water_fat is True:
 
-        #### case 1. subspace modeling
-        if basis is not None:
+            zm = nlop.calc_fat_modu(np.array(TE) * 1e-3, B0=B0)
+            zm = sp.to_device(zm, device)
+            N_zm_echo, N_zm_parm = zm.shape
 
-            Ncontrast, Ncoef = basis.shape
-            assert(Ncontrast == Ntime)
-            
+            ishape = [N_zm_parm] + img_shape
+
+        else:
+
             if combine_echo is True:
                 ishape = [1] + img_shape
             else:
                 ishape = [Necho] + img_shape
-            
-            if combine_shot is True:
-                ishape = [1] + ishape
-            else:
-                ishape = [Nseg] + ishape
 
-            ishape = [Ncoef] + ishape
+        if combine_shot is True:
+            ishape = [1] + ishape
+        else:
+            ishape = [Nseg] + ishape
 
-            sub_ishape = [Ncoef] + [np.prod(ishape[1:])]
+        if basis is not None:
+            N_basis_contrast, N_basis_coef = basis.shape
+            assert(N_basis_contrast == Ntime)
+
+            ishape = [N_basis_coef] + ishape
+        else:
+            ishape = [Ntime] + ishape
+
+        # %% construct MRI forward model
+
+        #### case 0. water/fat modeling
+        if model_water_fat is True:
+
+            T1 = sp.linop.Transpose(ishape, [-5, -6, -7, -4, -3, -2, -1])
+            R1 = sp.linop.Reshape([T1.oshape[0], np.prod(T1.oshape[1:])], T1.oshape)
+            MM = sp.linop.MatMul(R1.oshape, zm)
+            R2 = sp.linop.Reshape([N_zm_echo] + list(T1.oshape[1:]), MM.oshape)
+            T2 = sp.linop.Transpose(R2.oshape, [-5, -6, -7, -4, -3, -2, -1])
+            WF = T2 * R2 * MM * R1 * T1
+
+        else:
+            WF = sp.linop.Identity(ishape)
+
+
+        #### case 1. subspace modeling
+        if basis is not None:
+
+            sub_ishape = [N_basis_coef] + [np.prod(WF.oshape[1:])]
             # TODO: may require more Reshape linops to split between time and echo
-            sub_oshape = [Ntime] + ishape[1:]
+            sub_oshape = [Ntime] + list(WF.oshape[1:])
 
-            B1 = sp.linop.Reshape(sub_ishape, ishape)
+            B1 = sp.linop.Reshape(sub_ishape, WF.oshape)
             B2 = sp.linop.MatMul(B1.oshape, basis)
             B3 = sp.linop.Reshape(sub_oshape, B2.oshape)
 
@@ -839,19 +914,7 @@ class HighDimensionalRecon(sp.app.LinearLeastSquares):
 
         else:
 
-            if combine_echo is True:
-                assert(phase_echo is not None)
-                ishape = [1] + img_shape
-            else:
-                ishape = [Necho] + img_shape
-
-
-            if combine_shot is True:
-                ishape = list([Ntime, 1]) + ishape
-            else:
-                ishape = list([Ntime, Nseg]) + ishape
-
-            B = sp.linop.Identity(ishape)
+            B = sp.linop.Identity(WF.oshape)
 
 
         #### case 2. echo phase modeling
@@ -927,7 +990,7 @@ class HighDimensionalRecon(sp.app.LinearLeastSquares):
             SUM = sp.linop.Identity(W.oshape)
 
         #### chain models
-        A = SUM * W * M * F * S * SEG * ECO * B
+        A = SUM * W * M * F * S * SEG * ECO * B * WF
 
         print('>>> A oshape: ', A.oshape, ' ishape: ', A.ishape)
 
