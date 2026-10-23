@@ -761,7 +761,7 @@ class HighDimensionalRecon(sp.app.LinearLeastSquares):
 
         phase_shot (array): shot-to-shot phase maps.
         combine_shot (bool): reconstructed images (x) are shot-combined, 
-            i.e., x.shape[DIM_SEG] = 1. [default: False]
+            i.e., x.shape[DIM_SEGMENT] = 1. [default: False]
 
         phase_echo (array): echo-to-echo phase maps.
         combine_echo (bool): reconstructed images (x) are echo-combined,
@@ -932,7 +932,7 @@ class HighDimensionalRecon(sp.app.LinearLeastSquares):
         #### case 3. shot/segment phase modeling
         if phase_shot is not None:
 
-            assert Nseg == phase_shot.shape[DIM_SEG]
+            assert Nseg == phase_shot.shape[DIM_SEGMENT]
             SEG = sp.linop.Multiply(ECO.oshape, phase_shot)
 
         else:
