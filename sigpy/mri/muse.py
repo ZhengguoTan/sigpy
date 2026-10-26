@@ -145,7 +145,6 @@ def sms_sense_solve(A, y, lamda=0.01, tol=0, max_iter=30, verbose=False):
 
 # %%
 def calc_B0_phase(B0: np.ndarray, 
-                  kdat: np.ndarray,
                   nonzero_ky_ind: np.ndarray,
                   ESP: float = 0.48, # ms
                   reverse_pe: bool = False):
@@ -160,10 +159,6 @@ def calc_B0_phase(B0: np.ndarray,
 
     ETL = nonzero_ky_ind.shape[-1]
     nonzero_ky_ind_flat = np.reshape(nonzero_ky_ind, [-1, ETL])
-
-    weights = app._estimate_weights(kdat, None, None, coil_dim=-4)
-    print('> weights shape: ', weights.shape)
-    weight6 = np.reshape(weights, [data_high_len] + list(weights.shape[-4:]))
 
     eco_phase = []
     eco_weight = []
@@ -186,12 +181,11 @@ def calc_B0_phase(B0: np.ndarray,
 
                 delta_y = eind - nonzero_ky_ind_h[0]
 
-            eco_phase.append( np.exp(-2j * np.pi * B0 * ESP * delta_y * 1e-3) )
+            phs = np.exp(-2j * np.pi * B0 * ESP * delta_y * 1e-3)
+            eco_phase.append( phs )
 
-
-            w = np.zeros_like(weights, shape=weights.shape[-4:])
-            w[..., eind, :] = weight6[h, :, :, eind, :]
-
+            w = np.zeros_like(phs, shape=[1, N_z, N_y, N_x])
+            w[..., eind, :] = 1.
             eco_weight.append(w)
 
     eco_phase = np.array(eco_phase)
@@ -393,7 +387,7 @@ def MuseRecon(y: np.ndarray, coils: np.ndarray,
                 if B0 is not None:
 
                     nonzero_ky_ind = retro.find_nonzero_ky_lines(y[d], ky_axis=-2)
-                    eco_phase, eco_weight = calc_B0_phase(B0, y[d], nonzero_ky_ind, ESP, reverse_pe)
+                    eco_phase, eco_weight = calc_B0_phase(B0, nonzero_ky_ind, ESP, reverse_pe)
                     
                     if acs_shape is None:
                         B0_acs = B0.copy()
@@ -403,7 +397,7 @@ def MuseRecon(y: np.ndarray, coils: np.ndarray,
                     else:
                         B0_acs = _Resize(B0, acs_shape)
                         nonzero_ky_ind_acs = retro.find_nonzero_ky_lines(ksp_acs[d], ky_axis=-2)
-                        eco_phase_acs, eco_weight_acs = calc_B0_phase(B0_acs, ksp_acs[d], nonzero_ky_ind_acs, ESP, reverse_pe)
+                        eco_phase_acs, eco_weight_acs = calc_B0_phase(B0_acs, nonzero_ky_ind_acs, ESP, reverse_pe)
 
                     eco_phase_acs_xp = sp.to_device(eco_phase_acs, device=device)
                     eco_weight_acs_xp = sp.to_device(eco_weight_acs, device=device)
